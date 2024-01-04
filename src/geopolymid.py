@@ -3,67 +3,35 @@ import os
 import multiprocessing
 
 import networkx as nx
-import geojson
-
 import skgeom as sg
-from shapely.geometry import Polygon, LineString, Point
+import numpy as np
 
+from shapely.geometry import Polygon, LineString, Point
+from scipy.interpolate import splprep, splev
 from tqdm import tqdm
 
-
-def load_geojson_geometries(input_file):
-    with open(input_file) as f:
-        gj = geojson.load(f)
-
-    geometries = []
-    for feature in gj["features"]:
-        if feature["geometry"]["type"] != "Polygon":
-            continue
-
-        geom = Polygon(feature["geometry"]["coordinates"][0])
-        geometries.append((geom, feature["properties"]))
-
-    crs = gj["crs"]
-
-    return geometries, crs
+from .graph import dfs_sum_weights, get_heaviest_path
 
 
-def dfs_sum_weights(node_weights, graph, node, visited):
-    node_point = Point(node)
-    visited.add(node)
 
-    neighbors = graph.neighbors(node)
-    unvisited_neighbors = [n for n in neighbors if n not in visited]
+# def load_geojson_geometries(input_file):
+#     with open(input_file) as f:
+#         gj = geojson.load(f)
 
-    total = 0
-    for n in unvisited_neighbors:
-        n_point = Point(n)
-        distance = n_point.distance(node_point)
-        total += dfs_sum_weights(node_weights, graph, n, visited) + distance
+#     geometries = []
+#     for feature in gj["features"]:
+#         if feature["geometry"]["type"] != "Polygon":
+#             continue
 
-    node_weights[node] = total
-    return total
+#         geom = Polygon(feature["geometry"]["coordinates"][0])
+#         geometries.append((geom, feature["properties"]))
+
+#     crs = gj["crs"]
+
+#     return geometries, crs
 
 
-def get_heaviest_path(graph, node_weights, node, visited):
-    visited.add(node)
 
-    neighbors = graph.neighbors(node)
-    unvisited_neighbors = [n for n in neighbors if n not in visited]
-
-    # find unvisited neighbor with max node weight
-    max_weight = 0
-    max_weight_node = None
-    for n in unvisited_neighbors:
-        if node_weights[n] > max_weight:
-            max_weight = node_weights[n]
-            max_weight_node = n
-
-    if max_weight_node is None:
-        return [node]
-
-    # recurse, and return given list and the element containing current node
-    return get_heaviest_path(graph, node_weights, max_weight_node, visited) + [node]
 
 
 # create an approximation of medial axes from the input polygons
@@ -112,15 +80,43 @@ def get_weighted_medial_axis(polygon):
             )
 
         joined_line = LineString(heaviest_paths[0] + [center] + heaviest_paths[1][::-1])
-        return (joined_line, properties)
+
+        DEGREE = 3
+        smoothed_medial_axes = []
+        x, y = joined_line.xy
+
+        if len(x) < DEGREE + 1:
+            # not enough points to smooth
+            return (joined_line, properties)
+
+        # create a B-spline representation of the line
+        tck, u = splprep([x, y], s=2, k=DEGREE)
+        new_x, new_y = splev(np.linspace(0, 1, 100), tck)
+        smoothed_line = LineString([(x, y) for x, y in zip(new_x, new_y)])
+        
+        return (smoothed_line, properties)
+    
     except Exception as e:
         print(e)
         print(f"Error processing polygon with properties: {properties}")
         print("Skipped polygon")
         return (None, properties)
 
-
-def weighted_medial_axes_from_geojson(input_file, output_file, workers):
+@click.command()
+@click.option(
+    "--workers", default=multiprocessing.cpu_count(), help="Number of workers to use"
+)
+@click.option(
+    "--input-file",
+    help="The input gpkg file of polygons",
+    required=True,
+)
+@click.option(
+    "--output-file",
+    help="The output gpkg file of lines",
+    required=True,
+)
+def cli(workers, input_file, output_file):
     # check input exists
     if not os.path.exists(input_file):
         raise Exception(f"Cannot open {input_file}")
@@ -147,24 +143,6 @@ def weighted_medial_axes_from_geojson(input_file, output_file, workers):
     with open(output_file, "w") as f:
         gj = geojson.FeatureCollection(lines, crs=crs)
         geojson.dump(gj, f)
-
-
-@click.command()
-@click.option(
-    "--workers", default=multiprocessing.cpu_count(), help="Number of workers to use"
-)
-@click.option(
-    "--input-file",
-    help="The input geojson",
-    required=True,
-)
-@click.option(
-    "--output-file",
-    help="The output geojson",
-    required=True,
-)
-def cli(workers, input_file, output_file):
-    weighted_medial_axes_from_geojson(input_file, output_file, workers)
 
 
 if __name__ == "__main__":

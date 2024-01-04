@@ -1,0 +1,1 @@
+FROM --platform=linux/x86_64 mcr.microsoft.com/devcontainers/base:ubuntu

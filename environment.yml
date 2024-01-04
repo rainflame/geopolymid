@@ -1,0 +1,12 @@
+name: geopolymid
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - scikit-geometry
+  - networkx
+  - click
+  - shapely
+  - tqdm
+  - fiona
+  - scipy
