@@ -20,7 +20,7 @@ from .graph import dfs_sum_weights, get_heaviest_path
 # that is the furthest from the polygon boundary, an approxmiation for the most visually massive section of the polygon
 # then, we join the two paths together to get the medial axis
 def get_weighted_medial_axis(args):
-    polygon, presimplification_percentage, spline_degree, spline_points = args
+    polygon, skip_spline, presimplification_percentage, spline_degree, spline_points = args
     geom, properties = polygon
     try:
         polygon = sg.Polygon(geom.exterior.coords)
@@ -57,8 +57,10 @@ def get_weighted_medial_axis(args):
 
         joined_line = LineString(heaviest_paths[0] + [center] + heaviest_paths[1][::-1])
         
+        if skip_spline:
+            return (joined_line, properties)
+        
         x, y = joined_line.xy
-
         if len(x) < spline_degree + 1:
             # not enough points to smooth
             return (joined_line, properties)
@@ -91,6 +93,12 @@ def get_weighted_medial_axis(args):
     required=True,
 )
 @click.option(
+    "--skip-spline",
+    help="Don't smooth the medial axis",
+    default=False,
+    required=False,
+)
+@click.option(
     "--presimplification-percentage",
     help="The simplificication percentage to apply to the input polygons. This speeds up the medial axis calculation, but may result in a less accurate medial axis.",
     default=0.5,
@@ -111,7 +119,7 @@ def get_weighted_medial_axis(args):
     type=click.IntRange(25, 400),
     required=False,
 )
-def cli(workers, input_file, output_file, presimplification_percentage, spline_degree, spline_points):
+def cli(workers, input_file, output_file, skip_spline, presimplification_percentage, spline_degree, spline_points):
     # check input exists
     if not os.path.exists(input_file):
         raise Exception(f"Cannot open {input_file}")
@@ -145,7 +153,7 @@ def cli(workers, input_file, output_file, presimplification_percentage, spline_d
     with multiprocessing.Pool(workers) as p:
         for line, properties in tqdm(
             p.imap_unordered(get_weighted_medial_axis, 
-                             [(g, presimplification_percentage, spline_degree, spline_points, ) for g in geoms]
+                             [(g, skip_spline, presimplification_percentage, spline_degree, spline_points) for g in geoms]
                             ), total=len(geoms)
         ):
             if line is None:
