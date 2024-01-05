@@ -27,7 +27,7 @@ def get_heaviest_path(graph, node_weights, node, visited):
     max_weight = 0
     max_weight_node = None
     for n in unvisited_neighbors:
-        if node_weights[n] > max_weight:
+        if node_weights[n] >= max_weight:
             max_weight = node_weights[n]
             max_weight_node = n
 

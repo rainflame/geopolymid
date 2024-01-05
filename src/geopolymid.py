@@ -56,10 +56,6 @@ def get_weighted_medial_axis(args):
             )
 
         joined_line = LineString(heaviest_paths[0] + [center] + heaviest_paths[1][::-1])
-              
-        # TODO: the joined line doesn't include the segments that touch the polygon boundary
-        # so we need to figure out how to include those
-        # return (joined_line, properties) 
         
         x, y = joined_line.xy
 
