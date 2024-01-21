@@ -2,10 +2,12 @@ import networkx as nx
 import skgeom as sg
 import numpy as np
 
+import traceback
 from scipy.interpolate import splprep, splev
 from shapely.geometry import Polygon, LineString, MultiLineString
 
 from .graph import dfs_sum_weights, get_heaviest_path
+from .smoothing import chaikins_corner_cutting
 
 
 def reduce_polygon_dimensions(polygon):
@@ -15,7 +17,6 @@ def reduce_polygon_dimensions(polygon):
         interior_coords = [(x, y) for x, y, *_ in interior.coords]
         interiors.append(interior_coords)
 
-    # Create a new 2D polygon
     return Polygon(exterior_coords, interiors)
 
 
@@ -30,6 +31,7 @@ def get_weighted_medial_axis(args):
         polygon,
         skip_spline,
         presimplification_percentage,
+        smoothing_iterations,
         spline_degree,
         spline_points,
         debug,
@@ -77,14 +79,21 @@ def get_weighted_medial_axis(args):
         joined_line = LineString(heaviest_paths[0] + [center] + heaviest_paths[1][::-1])
         debug_medial_axis = joined_line
 
-        if not skip_spline:
-            x, y = joined_line.xy
-            # ensure there are enough points to create a spline
-            if len(x) >= spline_degree + 1:
-                # create a B-spline representation of the line
-                tck, _ = splprep([x, y], k=spline_degree)
-                new_x, new_y = splev(np.linspace(0, 1, spline_points), tck)
-                joined_line = LineString([(x, y) for x, y in zip(new_x, new_y)])
+        # simplify the joined line
+        joined_line = joined_line.simplify(0.001)
+        # smooth the line with chaikins
+        joined_line = LineString(
+            chaikins_corner_cutting(joined_line.coords, smoothing_iterations)
+        )
+
+        # if not skip_spline:
+        #     x, y = joined_line.xy
+        #     # ensure there are enough points to create a spline
+        #     if len(x) >= spline_degree + 1:
+        #         # create a B-spline representation of the line
+        #         tck, *_ = splprep([x, y], k=spline_degree, s=0)
+        #         new_x, new_y = splev(np.linspace(0, 1, spline_points), tck)
+        #         joined_line = LineString([(x, y) for x, y in zip(new_x, new_y)])
 
         # trim the line to the original polygon
         intersection = joined_line.intersection(geom)
@@ -96,7 +105,9 @@ def get_weighted_medial_axis(args):
         elif isinstance(intersection, MultiLineString):
             result = intersection
         else:
-            raise Exception(f"Unexpected intersection type: {type(intersection)}")
+            result = MultiLineString(
+                [geom for geom in intersection.geoms if isinstance(geom, LineString)]
+            )
 
         if debug:
             return (
@@ -111,7 +122,8 @@ def get_weighted_medial_axis(args):
         return (result, properties)
 
     except Exception as e:
-        print(e)
+        # print(e)
+        traceback.print_exc()
         print(f"Error processing polygon with properties: {properties}")
         print("Skipped polygon")
         return (None, properties)

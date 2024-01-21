@@ -40,6 +40,13 @@ from .polygon import reduce_polygon_dimensions, get_weighted_medial_axis
     required=False,
 )
 @click.option(
+    "--smoothing-iterations",
+    help="The number of smoothing iterations to apply to the medial axis.",
+    default=5,
+    type=click.IntRange(1, 10),
+    required=False,
+)
+@click.option(
     "--spline-degree",
     help="The degree of the spline. See scipy.interpolate.splprep for more info.",
     default=3,
@@ -66,6 +73,7 @@ def cli(
     output_file,
     skip_spline,
     presimplification_percentage,
+    smoothing_iterations,
     spline_degree,
     spline_points,
     debug,
@@ -112,6 +120,7 @@ def cli(
                         g,
                         skip_spline,
                         presimplification_percentage,
+                        smoothing_iterations,
                         spline_degree,
                         spline_points,
                         debug,
