@@ -33,13 +33,6 @@ from .polygon import reduce_polygon_dimensions, get_weighted_medial_axis
     required=False,
 )
 @click.option(
-    "--presimplification-percentage",
-    help="The simplificication percentage to apply to the input polygons. This speeds up the medial axis calculation, but may result in a less accurate medial axis.",
-    default=0.5,
-    type=click.FloatRange(0, 1),
-    required=False,
-)
-@click.option(
     "--smoothing-iterations",
     help="The number of smoothing iterations to apply to the medial axis.",
     default=5,
@@ -72,7 +65,6 @@ def cli(
     input_file,
     output_file,
     skip_spline,
-    presimplification_percentage,
     smoothing_iterations,
     spline_degree,
     spline_points,
@@ -119,7 +111,6 @@ def cli(
                     (
                         g,
                         skip_spline,
-                        presimplification_percentage,
                         smoothing_iterations,
                         spline_degree,
                         spline_points,
