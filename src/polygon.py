@@ -35,11 +35,13 @@ def get_weighted_medial_axis(args):
         skip_spline,
         smoothing_iterations,
         spline_degree,
-        spline_points,
+        spline_distance_threshold,
+        spline_distance_allowable_variance,
         debug,
     ) = args
     geom, properties = polygon
     try:
+        # TODO: set these as args from cli
         MIN_AREA_LOW_SIMPLIFICATION = 0.0000001
         MAX_AREA_HIGH_SIMPLIFICATION = 0.001
         LOW_SIMPLIFICATION = 0.0001
@@ -114,9 +116,6 @@ def get_weighted_medial_axis(args):
         for i, (x, y) in enumerate(geom.exterior.coords):
             idx.insert(i, [x, y, x, y])
 
-        DIST_THRESHOLD = 600  # points must be 600m from the shore
-        ALLOWABLE_VARIANCE = 50  # allow 50m variance once a segment has started
-
         points = []
         prev_point = None
 
@@ -129,16 +128,18 @@ def get_weighted_medial_axis(args):
 
             if i == 0:
                 this_point = {
-                    "away_from_edge": distance > DIST_THRESHOLD,
+                    "away_from_edge": distance > spline_distance_threshold,
                     "point": (x, y),
                 }
             else:
                 this_point = {
                     "away_from_edge": (
-                        distance > DIST_THRESHOLD
+                        distance > spline_distance_threshold
                         or (
                             prev_point["away_from_edge"]
-                            and distance > DIST_THRESHOLD - ALLOWABLE_VARIANCE
+                            and distance
+                            > spline_distance_threshold
+                            - spline_distance_allowable_variance
                         )
                     )
                     and not (

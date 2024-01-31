@@ -28,13 +28,13 @@ from .polygon import reduce_polygon_dimensions, get_weighted_medial_axis
 )
 @click.option(
     "--skip-spline",
-    help="Don't smooth the medial axis.",
+    help="Don't smooth the medial axis with a B-spline.",
     default=False,
     required=False,
 )
 @click.option(
     "--smoothing-iterations",
-    help="The number of smoothing iterations to apply to the medial axis.",
+    help="The number of smoothing iterations to apply to the medial axis (non-spline sections only).",
     default=5,
     type=click.IntRange(1, 10),
     required=False,
@@ -47,10 +47,17 @@ from .polygon import reduce_polygon_dimensions, get_weighted_medial_axis
     required=False,
 )
 @click.option(
-    "--spline-points",
-    help="The number of points to create the spline line from.",
-    default=100,
-    type=click.IntRange(25, 400),
+    "--spline-distance-threshold",
+    help="The distance in meters from the edge of the polygon the centerline must be to smooth with a B-spline.",
+    default=600,
+    type=click.IntRange(0, 100000),
+    required=False,
+)
+@click.option(
+    "--spline-distance-allowable-variance",
+    help="Once a section is greater than --spline-distance-threshold, how much can the distance vary less than --spline-distance-threshold before the spline is terminated?",
+    default=50,
+    type=click.IntRange(0, 100000),
     required=False,
 )
 @click.option(
@@ -67,7 +74,8 @@ def cli(
     skip_spline,
     smoothing_iterations,
     spline_degree,
-    spline_points,
+    spline_distance_threshold,
+    spline_distance_allowable_variance,
     debug,
 ):
     # check input exists
@@ -113,7 +121,8 @@ def cli(
                         skip_spline,
                         smoothing_iterations,
                         spline_degree,
-                        spline_points,
+                        spline_distance_threshold,
+                        spline_distance_allowable_variance,
                         debug,
                     )
                     for g in geoms
