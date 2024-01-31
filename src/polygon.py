@@ -40,12 +40,8 @@ def get_weighted_medial_axis(args):
     ) = args
     geom, properties = polygon
     try:
-        # print the name and area
-        if properties["name"] == "Green Lakes" or properties["name"] == "Waldo Lake":
-            print(f"Processing polygon {properties['name']} with area {geom.area}")
-
-        MIN_AREA_LOW_SIMPLIFICATION = 0.0000001  # example value, define your own
-        MAX_AREA_HIGH_SIMPLIFICATION = 0.001  # example value, define your own
+        MIN_AREA_LOW_SIMPLIFICATION = 0.0000001
+        MAX_AREA_HIGH_SIMPLIFICATION = 0.001
         LOW_SIMPLIFICATION = 0.0001
         HIGH_SIMPLIFICATION = 0.001
 
@@ -111,13 +107,6 @@ def get_weighted_medial_axis(args):
         joined_line = LineString(heaviest_paths[0] + [center] + heaviest_paths[1][::-1])
         debug_medial_axis = joined_line
 
-        # # simplify the joined line
-        # joined_line = joined_line.simplify(0.001)
-        # # smooth the line with chaikins
-        # joined_line = LineString(
-        #     chaikins_corner_cutting(joined_line.coords, smoothing_iterations)
-        # )
-
         geod = Geod(ellps="WGS84")
         idx = index.Index()
 
@@ -168,49 +157,21 @@ def get_weighted_medial_axis(args):
         # previous and next points are not, the point is added to the previous section
         for i, point in enumerate(points):
             if len(sections) == 0:
-                # print(f"adding point {i} to new section {point['away_from_edge']}")
                 sections.append([point])
             elif point["away_from_edge"] == sections[-1][-1]["away_from_edge"]:
-                # print(
-                #     f"adding point {i} to section away from edge: {point['away_from_edge']} (1)"
-                # )
                 sections[-1].append(point)
             elif i < len(points) - 1 and (
                 point["away_from_edge"]
                 and not sections[-1][-1]["away_from_edge"]
                 and not points[i + 1]["away_from_edge"]
             ):
-                # print(
-                #     f"adding point {i} to section away from edge: {point['away_from_edge']} (2)"
-                # )
                 sections[-1].append(point)
             else:
-                # print(f"adding point {i} to new section {point['away_from_edge']}")
                 amended_previous_point = {
                     "away_from_edge": point["away_from_edge"],
                     "point": sections[-1][-1]["point"],
                 }
                 sections.append([amended_previous_point, point])
-
-        # sections far from the borders get another round of simplification to smooth out
-        # # any interior bends in the medial axis
-        # for i, section in enumerate(sections):
-        #     if section[0]["away_from_edge"]:
-        #         # get the first and last points of the sectino
-        #         first_point = section[0]["point"]
-        #         last_point = section[-1]["point"]
-
-        #         interpolated_x = np.linspace(first_point[0], last_point[0], 6)
-        #         interpolated_y = np.linspace(first_point[1], last_point[1], 6)
-        #         line = LineString(
-        #             [(x, y) for x, y in zip(interpolated_x, interpolated_y)]
-        #         )
-        #         sections[i] = line
-
-        #         # line = LineString([point["point"] for point in section])
-        #         # # simplify the section more aggressively
-        #         # line = line.simplify(0.001)
-        #         # sections[i] = line
 
         if not skip_spline:
             for i, section in enumerate(sections):
@@ -280,7 +241,6 @@ def get_weighted_medial_axis(args):
         return (result, properties)
 
     except Exception as e:
-        # print(e)
         traceback.print_exc()
         print(f"Error processing polygon with properties: {properties}")
         print("Skipped polygon")
