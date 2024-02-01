@@ -28,15 +28,15 @@ from .polygon import reduce_polygon_dimensions, get_weighted_medial_axis
 )
 @click.option(
     "--skip-spline",
-    help="Don't smooth the medial axis.",
+    help="Don't smooth the medial axis with a B-spline.",
     default=False,
     required=False,
 )
 @click.option(
-    "--presimplification-percentage",
-    help="The simplificication percentage to apply to the input polygons. This speeds up the medial axis calculation, but may result in a less accurate medial axis.",
-    default=0.5,
-    type=click.FloatRange(0, 1),
+    "--smoothing-iterations",
+    help="The number of smoothing iterations to apply to the medial axis (non-spline sections only).",
+    default=5,
+    type=click.IntRange(1, 10),
     required=False,
 )
 @click.option(
@@ -47,10 +47,17 @@ from .polygon import reduce_polygon_dimensions, get_weighted_medial_axis
     required=False,
 )
 @click.option(
-    "--spline-points",
-    help="The number of points to create the spline line from.",
-    default=100,
-    type=click.IntRange(25, 400),
+    "--spline-distance-threshold",
+    help="The distance in meters from the edge of the polygon the centerline must be to smooth with a B-spline.",
+    default=600,
+    type=click.IntRange(0, 100000),
+    required=False,
+)
+@click.option(
+    "--spline-distance-allowable-variance",
+    help="Once a section is greater than --spline-distance-threshold, how much can the distance vary less than --spline-distance-threshold before the spline is terminated?",
+    default=50,
+    type=click.IntRange(0, 100000),
     required=False,
 )
 @click.option(
@@ -65,9 +72,10 @@ def cli(
     input_file,
     output_file,
     skip_spline,
-    presimplification_percentage,
+    smoothing_iterations,
     spline_degree,
-    spline_points,
+    spline_distance_threshold,
+    spline_distance_allowable_variance,
     debug,
 ):
     # check input exists
@@ -111,9 +119,10 @@ def cli(
                     (
                         g,
                         skip_spline,
-                        presimplification_percentage,
+                        smoothing_iterations,
                         spline_degree,
-                        spline_points,
+                        spline_distance_threshold,
+                        spline_distance_allowable_variance,
                         debug,
                     )
                     for g in geoms
