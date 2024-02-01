@@ -44,8 +44,8 @@ def get_weighted_medial_axis(args):
         # TODO: set these as args from cli
         MIN_AREA_LOW_SIMPLIFICATION = 0.0000001
         MAX_AREA_HIGH_SIMPLIFICATION = 0.001
-        LOW_SIMPLIFICATION = 0.0001
-        HIGH_SIMPLIFICATION = 0.001
+        LOW_SIMPLIFICATION = 0.00001
+        HIGH_SIMPLIFICATION = 0.0001
 
         area = geom.area
         poly_simplification = LOW_SIMPLIFICATION
@@ -106,8 +106,8 @@ def get_weighted_medial_axis(args):
                 get_heaviest_path(graph, node_weights, n, set([center]))
             )
 
-        joined_line = LineString(heaviest_paths[0] + [center] + heaviest_paths[1][::-1])
-        debug_medial_axis = joined_line
+        medial_axis = LineString(heaviest_paths[0] + [center] + heaviest_paths[1][::-1])
+        debug_medial_axis = medial_axis
 
         geod = Geod(ellps="WGS84")
         idx = index.Index()
@@ -118,102 +118,93 @@ def get_weighted_medial_axis(args):
 
         points = []
         prev_point = None
+        segments = []
 
         # create sections of the line that are far enough from the polygon boundary
-        for i, (x, y) in enumerate(joined_line.coords):
+        for i, (x, y) in enumerate(medial_axis.coords):
             # for each point in the line, find the nearest point in the original polygon
             nearest_index = list(idx.nearest((x, y, x, y), num_results=1))[0]
             nearest_point = geom.exterior.coords[nearest_index]
             _, _, distance = geod.inv(x, y, nearest_point[0], nearest_point[1])
 
             if i == 0:
-                this_point = {
-                    "away_from_edge": distance > spline_distance_threshold,
-                    "point": (x, y),
-                }
+                segments.append([i])
+                # print("new segment")
             else:
-                this_point = {
-                    "away_from_edge": (
-                        distance > spline_distance_threshold
-                        or (
-                            prev_point["away_from_edge"]
-                            and distance
-                            > spline_distance_threshold
-                            - spline_distance_allowable_variance
-                        )
-                    )
-                    and not (
-                        i == 1 and (not prev_point["away_from_edge"])
-                    ),  # if the first point is by the edge, don't let it be a singleton
-                    "point": (x, y),
-                }
+                if distance < spline_distance_threshold:
+                    if segments[-1][-1] == i - 1:
+                        segments[-1].append(i)
+                        # print("adding to previous")
+                    else:
+                        segments.append([i])
+                        # print("new segment")
 
-            # print(f"Point {i} away from edge: {this_point['away_from_edge']}")
-            points.append(this_point)
-            prev_point = this_point
+        def line_too_close_to_edge(line, idx):
+            for x, y in line.coords:
+                nearest_index = list(idx.nearest((x, y, x, y), num_results=1))[0]
+                nearest_point = geom.exterior.coords[nearest_index]
+                _, _, distance = geod.inv(x, y, nearest_point[0], nearest_point[1])
+                if distance < spline_distance_threshold:
+                    return True
+            return False
 
-        sections = []
-        # construct sections from the points. points are grouped into sections with the
-        # same away_from_edge value. In the case that a point is away_from_edge, but the
-        # previous and next points are not, the point is added to the previous section
-        for i, point in enumerate(points):
-            if len(sections) == 0:
-                sections.append([point])
-            elif point["away_from_edge"] == sections[-1][-1]["away_from_edge"]:
-                sections[-1].append(point)
-            elif i < len(points) - 1 and (
-                point["away_from_edge"]
-                and not sections[-1][-1]["away_from_edge"]
-                and not points[i + 1]["away_from_edge"]
-            ):
-                sections[-1].append(point)
-            else:
-                amended_previous_point = {
-                    "away_from_edge": point["away_from_edge"],
-                    "point": sections[-1][-1]["point"],
-                }
-                sections.append([amended_previous_point, point])
+        while len(segments) > 1:
+            segment_a_point_index = (
+                segments[0][-1] + 1
+            )  # start at the first point that's away from the edge
+            segment_b_point_index = segments[1][0] - 1
 
-        if not skip_spline:
-            for i, section in enumerate(sections):
-                if section[0]["away_from_edge"]:
-                    # create a line from the points
-                    line = LineString([point["point"] for point in section])
-                    line = line.simplify(poly_simplification)
-                    x, y = line.xy
-                    # ensure there are enough points to create a spline
-                    if len(x) >= spline_degree + 1:
-                        # create a B-spline representation of the line
-                        tck, *_ = splprep([x, y], k=spline_degree)
-                        new_x, new_y = splev(np.linspace(0, 1, len(x)), tck)
-                        # make the first and last points the same as the original line
-                        new_x[0] = x[0]
-                        new_y[0] = y[0]
-                        new_x[-1] = x[-1]
-                        new_y[-1] = y[-1]
+            while segment_b_point_index != segment_a_point_index:
+                # Generate 100 evenly spaced points along the line
+                linspace_points = np.linspace(
+                    medial_axis.coords[segment_a_point_index],
+                    medial_axis.coords[segment_b_point_index],
+                    100,
+                )
+                candidate_line = LineString([tuple(p) for p in linspace_points])
 
-                        sections[i] = LineString([(x, y) for x, y in zip(new_x, new_y)])
+                # if the invariant does not hold, try the next point down the medial axis
+                if line_too_close_to_edge(candidate_line, idx):
+                    segment_b_point_index -= 1
+                else:
+                    # if the last point in the segment a is not the current segment a point index, then we
+                    # are at the start and need to add the current point to the end of segment a
+                    if segments[0][-1] != segment_a_point_index:
+                        segments[0].append(segment_a_point_index)
+                    # add the located point to the end of segment a
+                    segments[0].append(segment_b_point_index)
+                    # reset segment b starting point
+                    segment_b_point_index = segments[1][0] - 1
+                    # now start segment a at the new point
+                    segment_a_point_index = segments[0][-1]
 
-        # # filter out sectiosn away from edge
-        # sections = [section for section in sections if not section[0]["away_from_edge"]]
+            # add segment b to a
+            segments[0] += segments[1]
+            # remove segment b
+            segments.pop(1)
 
-        # create lines from any remaining sections
-        for i, section in enumerate(sections):
-            if isinstance(section, list):
-                x, y = zip(*[point["point"] for point in section])
-                sections[i] = LineString([(x, y) for x, y in zip(x, y)])
+        lines = []
+        # create lines from the sections
+        for segment in segments:
+            if len(segment) > 1:
+                x, y = zip(*[medial_axis.coords[i] for i in segment])
+                line = LineString([(x, y) for x, y in zip(x, y)])
+                lines.append(line)
 
-        coords = list(sections[0].coords)
-        for line in sections[1:]:
-            coords += list(line.coords)[1:]
+        # join the lines together
+        result = MultiLineString(lines)
 
-        line = LineString(coords)
-        line = line.simplify(poly_simplification)
+        # coords = list(sections[0].coords)
+        # for line in sections[1:]:
+        #     coords += list(line.coords)[1:]
 
-        # apply chaikins corner cutting to smooth the line
-        result = LineString(chaikins_corner_cutting(line.coords, smoothing_iterations))
+        # line = LineString(coords)
+        # line = line.simplify(poly_simplification)
 
-        result = MultiLineString([result])
+        # # apply chaikins corner cutting to smooth the line
+        # result = LineString(chaikins_corner_cutting(line.coords, smoothing_iterations))
+
+        # result = MultiLineString([result])
 
         # # trim the line to the original polygon
         # intersection = joined_line.intersection(geom)
