@@ -50,17 +50,32 @@ def make_skeleton_graph_from_poly(polygon, graph):
         if -1 not in vert:
             points = vor.vertices[vert]
             edge = LineString(points)
-            # if the edge is inside the polygon, add it to the graph
-            if polygon.contains(edge):
-                graph.add_edge(
-                    (points[0][0], points[0][1]), (points[1][0], points[1][1])
-                )
+            if polygon.intersects(edge):
+                if not polygon.contains(edge):
+                    # if the edge intersects the polygon's edge, trim it to the interior of the polygon
+                    edge = edge.intersection(polygon)
+                    if edge.geom_type == "LineString":
+                        graph.add_edge(
+                            edge.coords[0],
+                            edge.coords[1],
+                        )
+                else:
+                    graph.add_edge(
+                        (points[0][0], points[0][1]), (points[1][0], points[1][1])
+                    )
 
     return graph
 
 
 def find_graph_medial_axis(graph):
-    center = nx.center(graph)[0]
+
+    if nx.is_connected(graph):
+        center = nx.center(graph)[0]
+    else:
+        largest_cc = max(nx.connected_components(graph), key=len)
+        subgraph = graph.subgraph(largest_cc).copy()
+        center = nx.center(subgraph)[0]
+
     node_weights = {}
     dfs_sum_weights(node_weights, graph, center, set())
 
@@ -75,4 +90,7 @@ def find_graph_medial_axis(graph):
     for n, _ in neighbor_weights[:2]:
         heaviest_paths.append(get_heaviest_path(graph, node_weights, n, set([center])))
 
-    return LineString(heaviest_paths[0] + [center] + heaviest_paths[1][::-1])
+    left = [] if len(heaviest_paths) == 0 else heaviest_paths[0]
+    right = [] if len(heaviest_paths) == 1 else heaviest_paths[1][::-1]
+
+    return LineString(left + [center] + right)
