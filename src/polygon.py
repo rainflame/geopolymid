@@ -11,6 +11,7 @@ from pyproj import Geod
 
 from .graph import dfs_sum_weights, get_heaviest_path
 from .smoothing import chaikins_corner_cutting
+from .line import trim_line
 
 
 def reduce_polygon_dimensions(polygon):
@@ -32,37 +33,41 @@ def reduce_polygon_dimensions(polygon):
 def get_weighted_medial_axis(args):
     (
         polygon,
+        simplification_factor,
         skip_spline,
         smoothing_iterations,
         spline_degree,
         spline_distance_threshold,
         spline_distance_allowable_variance,
+        trim_output_lines_by_percent,
         debug,
     ) = args
     geom, properties = polygon
     try:
         # TODO: set these as args from cli
-        MIN_AREA_LOW_SIMPLIFICATION = 0.0000001
-        MAX_AREA_HIGH_SIMPLIFICATION = 0.001
-        LOW_SIMPLIFICATION = 0.0001
-        HIGH_SIMPLIFICATION = 0.001
+        # MIN_AREA_LOW_SIMPLIFICATION = 0.0000001
+        # MAX_AREA_HIGH_SIMPLIFICATION = 0.001
+        # LOW_SIMPLIFICATION = 0.0001
+        # HIGH_SIMPLIFICATION = 0.001
 
-        area = geom.area
-        poly_simplification = LOW_SIMPLIFICATION
+        # area = geom.area
+        # poly_simplification = LOW_SIMPLIFICATION
 
-        if area <= MIN_AREA_LOW_SIMPLIFICATION:
-            poly_simplification = LOW_SIMPLIFICATION
-        elif area >= MAX_AREA_HIGH_SIMPLIFICATION:
-            poly_simplification = HIGH_SIMPLIFICATION
-        else:
-            # Calculate the ratio of the area within the threshold range
-            ratio = (area - MIN_AREA_LOW_SIMPLIFICATION) / (
-                MAX_AREA_HIGH_SIMPLIFICATION - MIN_AREA_LOW_SIMPLIFICATION
-            )
-            # Interpolate simplification value
-            poly_simplification = np.interp(
-                ratio, [0, 1], [LOW_SIMPLIFICATION, HIGH_SIMPLIFICATION]
-            )
+        # if area <= MIN_AREA_LOW_SIMPLIFICATION:
+        #     poly_simplification = LOW_SIMPLIFICATION
+        # elif area >= MAX_AREA_HIGH_SIMPLIFICATION:
+        #     poly_simplification = HIGH_SIMPLIFICATION
+        # else:
+        #     # Calculate the ratio of the area within the threshold range
+        #     ratio = (area - MIN_AREA_LOW_SIMPLIFICATION) / (
+        #         MAX_AREA_HIGH_SIMPLIFICATION - MIN_AREA_LOW_SIMPLIFICATION
+        #     )
+        #     # Interpolate simplification value
+        #     poly_simplification = np.interp(
+        #         ratio, [0, 1], [LOW_SIMPLIFICATION, HIGH_SIMPLIFICATION]
+        #     )
+
+        poly_simplification = geom.area * simplification_factor
 
         simple = geom.simplify(poly_simplification)
         polygon = sg.Polygon(simple.exterior.coords)
@@ -212,28 +217,14 @@ def get_weighted_medial_axis(args):
 
         # apply chaikins corner cutting to smooth the line
         result = LineString(chaikins_corner_cutting(line.coords, smoothing_iterations))
-
-        result = MultiLineString([result])
-
-        # # trim the line to the original polygon
-        # intersection = joined_line.intersection(geom)
-
-        # if intersection.is_empty:
-        #     result = MultiLineString([])
-        # elif isinstance(intersection, LineString):
-        #     result = MultiLineString([intersection])
-        # elif isinstance(intersection, MultiLineString):
-        #     result = intersection
-        # else:
-        #     result = MultiLineString(
-        #         [geom for geom in intersection.geoms if isinstance(geom, LineString)]
-        #     )
+        result = trim_line(result, trim_output_lines_by_percent)
+        result = result.simplify(poly_simplification)
 
         if debug:
             return (
                 (
                     MultiLineString(debug_skeleton),
-                    MultiLineString([debug_medial_axis]),
+                    debug_medial_axis,
                     result,
                 ),
                 properties,

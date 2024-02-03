@@ -27,6 +27,13 @@ from .polygon import reduce_polygon_dimensions, get_weighted_medial_axis
     required=True,
 )
 @click.option(
+    "--simplification-factor",
+    help="Amount the output medial axes should be simplified.",
+    default=0.5,
+    type=click.FloatRange(0, 1),
+    required=False,
+)
+@click.option(
     "--skip-spline",
     help="Don't smooth the medial axis with a B-spline.",
     default=False,
@@ -61,6 +68,13 @@ from .polygon import reduce_polygon_dimensions, get_weighted_medial_axis
     required=False,
 )
 @click.option(
+    "--trim-output-lines-by-percent",
+    help="Trim the output from each end by this percent.",
+    default=0,
+    type=click.IntRange(0, 99),
+    required=False,
+)
+@click.option(
     "--debug",
     help="Output debug geometry of the skeleton and medial axis in a separate file.",
     default=False,
@@ -71,11 +85,13 @@ def cli(
     workers,
     input_file,
     output_file,
+    simplification_factor,
     skip_spline,
     smoothing_iterations,
     spline_degree,
     spline_distance_threshold,
     spline_distance_allowable_variance,
+    trim_output_lines_by_percent,
     debug,
 ):
     # check input exists
@@ -118,11 +134,13 @@ def cli(
                 [
                     (
                         g,
+                        simplification_factor,
                         skip_spline,
                         smoothing_iterations,
                         spline_degree,
                         spline_distance_threshold,
                         spline_distance_allowable_variance,
+                        trim_output_lines_by_percent,
                         debug,
                     )
                     for g in geoms
@@ -136,12 +154,10 @@ def cli(
 
     print(f"Sucessfully created smoothed medial axes for {len(lines)} polygons")
 
-    schema["geometry"] = "MultiLineString"
-
     if debug:
         skeleton_output_file = output_file.replace(".gpkg", "_skeleton.gpkg")
         medial_axis_output_file = output_file.replace(".gpkg", "_medial_axis.gpkg")
-
+        schema["geometry"] = "MultiLineString"
         with fiona.open(
             skeleton_output_file,
             "w",
@@ -157,7 +173,7 @@ def cli(
                         "properties": properties,
                     }
                 )
-
+        schema["geometry"] = "LineString"
         with fiona.open(
             medial_axis_output_file,
             "w",
@@ -173,6 +189,8 @@ def cli(
                         "properties": properties,
                     }
                 )
+
+    schema["geometry"] = "LineString"
 
     with fiona.open(
         output_file,
