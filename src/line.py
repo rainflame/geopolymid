@@ -1,15 +1,15 @@
 from shapely.geometry import LineString
 
 
-def trim_line(linestring, reduction_percent):
-    original_length = linestring.length
+def trim_line(line, reduction_percent):
+    original_length = line.length
     trim_length_each_side = original_length * (reduction_percent / 100) / 2
 
     start_dist = trim_length_each_side
     end_dist = original_length - trim_length_each_side
 
     # Find the points along the line that correspond to these distances
-    coords = list(linestring.coords)
+    coords = list(line.coords)
     new_coords = []
     accumulated_length = 0
 

@@ -34,12 +34,6 @@ from .polygon import reduce_polygon_dimensions, get_weighted_medial_axis
     required=False,
 )
 @click.option(
-    "--skip-spline",
-    help="Don't smooth the medial axis with a B-spline.",
-    default=False,
-    required=False,
-)
-@click.option(
     "--smoothing-iterations",
     help="The number of smoothing iterations to apply to the medial axis (non-spline sections only).",
     default=5,
@@ -57,13 +51,6 @@ from .polygon import reduce_polygon_dimensions, get_weighted_medial_axis
     "--spline-distance-threshold",
     help="The distance in meters from the edge of the polygon the centerline must be to smooth with a B-spline.",
     default=600,
-    type=click.IntRange(0, 100000),
-    required=False,
-)
-@click.option(
-    "--spline-distance-allowable-variance",
-    help="Once a section is greater than --spline-distance-threshold, how much can the distance vary less than --spline-distance-threshold before the spline is terminated?",
-    default=50,
     type=click.IntRange(0, 100000),
     required=False,
 )
@@ -86,11 +73,9 @@ def cli(
     input_file,
     output_file,
     simplification_factor,
-    skip_spline,
     smoothing_iterations,
     spline_degree,
     spline_distance_threshold,
-    spline_distance_allowable_variance,
     trim_output_lines_by_percent,
     debug,
 ):
@@ -135,11 +120,9 @@ def cli(
                     (
                         g,
                         simplification_factor,
-                        skip_spline,
                         smoothing_iterations,
                         spline_degree,
                         spline_distance_threshold,
-                        spline_distance_allowable_variance,
                         trim_output_lines_by_percent,
                         debug,
                     )
@@ -173,7 +156,7 @@ def cli(
                         "properties": properties,
                     }
                 )
-        schema["geometry"] = "LineString"
+        schema["geometry"] = "MultiLineString"
         with fiona.open(
             medial_axis_output_file,
             "w",
