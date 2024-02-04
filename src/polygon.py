@@ -7,12 +7,22 @@ from shapely.geometry import Polygon, LineString, MultiLineString, Point
 from typing import List
 
 from rtree import index
-from pyproj import Geod
 
 from .graph import find_graph_medial_axis, make_skeleton_graph_from_poly
 from .smoothing import chaikins_corner_cutting
 from .line import trim_line
 from .point import MedialAxisPoint
+
+from dataclasses import dataclass
+
+
+@dataclass
+class MedialAxis:
+    centroid: Point
+    axis: LineString
+    debug_skeleton: MultiLineString
+    debug_medial_axis: MultiLineString
+    properties: dict
 
 
 def reduce_polygon_dimensions(polygon):
@@ -34,13 +44,12 @@ def construct_polygon_rtree_index(polygon):
 
 
 def get_nearest_point_on_polygon(polygon, polygon_rtree_index, x, y):
-    geod = Geod(ellps="WGS84")
     nearest_index = list(polygon_rtree_index.nearest((x, y, x, y), num_results=1))[0]
     nearest_point = polygon.exterior.coords[nearest_index]
-    # get dist between points in meters
-    _, _, distance = geod.inv(x, y, nearest_point[0], nearest_point[1])
-
-    return distance
+    p1 = Point(x, y)
+    p2 = Point(nearest_point)
+    dist = p1.distance(p2)
+    return dist
 
 
 # create an approximation of medial axes from the input polygons
@@ -52,15 +61,28 @@ def get_nearest_point_on_polygon(polygon, polygon_rtree_index, x, y):
 def get_weighted_medial_axis(args):
     (
         polygon,
+        min_area,
         simplification_factor,
         smoothing_iterations,
         spline_degree,
-        spline_distance_threshold,
+        spline_start_percent,
         trim_output_lines_by_percent,
-        debug,
     ) = args
     geom, properties = polygon
     try:
+        # return the centroid if the area is too small
+        if geom.area < min_area:
+            return MedialAxis(geom.centroid, None, None, None, properties)
+
+        rect = geom.minimum_rotated_rectangle
+        # get the height and width of the bounding rect
+        height = abs(rect.exterior.coords[0][1] - rect.exterior.coords[1][1])
+        width = abs(rect.exterior.coords[1][0] - rect.exterior.coords[2][0])
+        reference_dist = min(height, width)
+
+        if reference_dist == 0:
+            raise Exception("Reference distance is zero")
+
         graph = nx.Graph()
         graph = make_skeleton_graph_from_poly(geom, graph)
 
@@ -76,22 +98,26 @@ def get_weighted_medial_axis(args):
 
         medial_axis_points: List[MedialAxisPoint] = []
         for i, (x, y) in enumerate(medial_axis.coords):
-            # for each point in the line, find the nearest point in the original polygon
-            distance = get_nearest_point_on_polygon(geom, idx, x, y)
-            p = MedialAxisPoint(Point(x, y), distance > spline_distance_threshold)
+            # for each point in the line, find the nearest point on the original polygon's edge
+            dist = get_nearest_point_on_polygon(geom, idx, x, y)
+            percent_dist = dist / reference_dist
+            p = MedialAxisPoint(Point(x, y), percent_dist >= spline_start_percent)
             medial_axis_points.append(p)
 
         sections = []
         for i, point in enumerate(medial_axis_points):
             if i == 0:
                 sections.append([i])
+            elif i == len(medial_axis_points) - 1:
+                # always add the last point to the previous section so it isn't a singleton
+                sections[-1].append(i)
             elif point.to_convert == medial_axis_points[i - 1].to_convert:
-                # both are the same, so we can add to the current section
+                # both are the same, so we can add to the previous section
                 sections[-1].append(i)
             elif point.to_convert != medial_axis_points[i - 1].to_convert:
-                # if the previous section is one point only, add the current point to it
-                # this is to ensure each section has at least two points and can be a line
                 if len(sections[-1]) == 1:
+                    # if the previous section is one point only, add the current point to it
+                    # this is to ensure each section has at least two points and can be a line
                     sections[-1].append(i)
                     # set this point to match the previous to_convert value
                     medial_axis_points[i].to_convert = medial_axis_points[
@@ -117,6 +143,8 @@ def get_weighted_medial_axis(args):
                     smoothed_section_lines.append(
                         LineString([(x, y) for x, y in zip(new_x, new_y)])
                     )
+                else:
+                    smoothed_section_lines.append(line)
             else:
                 smoothed_section_lines.append(line)
 
@@ -137,20 +165,15 @@ def get_weighted_medial_axis(args):
             geom.area * simplification_factor
         )
 
-        if debug:
-            return (
-                (
-                    MultiLineString(debug_skeleton),
-                    MultiLineString([debug_medial_axis]),
-                    smoothed_medial_axis,
-                ),
-                properties,
-            )
-
-        return (smoothed_medial_axis, properties)
+        return MedialAxis(
+            None,
+            smoothed_medial_axis,
+            MultiLineString(debug_skeleton),
+            MultiLineString([debug_medial_axis]),
+            properties,
+        )
 
     except Exception as e:
         traceback.print_exc()
-        print(f"Error processing polygon with properties: {properties}")
-        print("Skipped polygon")
-        return (None, properties)
+        print("Skipped medial axis generation, returning centroid instead")
+        return MedialAxis(geom.centroid, None, None, None, properties)
