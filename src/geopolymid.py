@@ -12,11 +12,6 @@ from .polygon import reduce_polygon_dimensions, get_weighted_medial_axis
 
 @click.command()
 @click.option(
-    "--workers",
-    default=multiprocessing.cpu_count(),
-    help="Number of workers to use. Defaults to all available cores.",
-)
-@click.option(
     "--input-file",
     help="The input gpkg file of polygons.",
     required=True,
@@ -28,12 +23,12 @@ from .polygon import reduce_polygon_dimensions, get_weighted_medial_axis
 )
 @click.option(
     "--output-file-centroids",
-    help="The output gpkg file of centroids, if --min-area > 0.",
+    help="The output gpkg file of centroids. Only required if --min-area > 0.",
     required=False,
 )
 @click.option(
     "--min-area",
-    help="Minimum area of polygons to process. Smaller polygons will have centroids calculated instead of medial axes.",
+    help="Minimum area of polygons to process. Polygons smaller than this will have centroids calculated instead of medial axes.",
     default=0,
     type=click.FloatRange(0, 1000000),
     required=False,
@@ -47,41 +42,45 @@ from .polygon import reduce_polygon_dimensions, get_weighted_medial_axis
 )
 @click.option(
     "--smoothing-iterations",
-    help="The number of smoothing iterations to apply to the medial axis (non-spline sections only).",
+    help="The number of smoothing iterations to apply to the medial axis.",
     default=5,
     type=click.IntRange(1, 10),
     required=False,
 )
 @click.option(
     "--spline-degree",
-    help="The degree of the spline. See scipy.interpolate.splprep for more info.",
+    help="For sections of the medial axes that are smoothed with a spline, the degree of the spline. See scipy.interpolate.splprep for more info.",
     default=3,
     type=click.IntRange(1, 5),
     required=False,
 )
 @click.option(
     "--spline-start-percent",
-    help="How far from the side of the polygon must the medial axis be to convert it to a spline? Expressed as a percentage of the length of the small side of the bounding box enclosing the polygon. Recommended to be between 0.05 and 0.3",
+    help="How far from the side of the polygon must the medial axis be to use a spline to smooth it? Expressed as a percentage of the length of the small side of the bounding box enclosing the polygon. Somewhere betwee 0.05 and 0.3 often works well.",
     default=0.2,
     type=click.FloatRange(0, 1),
     required=False,
 )
 @click.option(
     "--trim-output-lines-by-percent",
-    help="Trim the output from each end by this percent.",
+    help="Trim the output lines from each end by this percent.",
     default=0,
     type=click.IntRange(0, 99),
     required=False,
 )
 @click.option(
+    "--workers",
+    default=multiprocessing.cpu_count(),
+    help="Number of workers to use. Defaults to all available CPU cores.",
+)
+@click.option(
     "--debug",
-    help="Output debug geometry of the skeleton and medial axis in a separate file.",
+    help="Output debug geometry of the skeleton and medial axis in a separate file for debugging.",
     default=False,
     required=False,
     is_flag=True,
 )
 def cli(
-    workers,
     input_file,
     output_file,
     output_file_centroids,
@@ -91,6 +90,7 @@ def cli(
     spline_degree,
     spline_start_percent,
     trim_output_lines_by_percent,
+    workers,
     debug,
 ):
     if not os.path.exists(input_file):
