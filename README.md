@@ -32,31 +32,39 @@ python -m src.geopolymid \
 Usage: python -m src.geopolymid [OPTIONS]
 
 Options:
-  --workers INTEGER               Number of workers to use. Defaults to all
-                                  available cores.
   --input-file TEXT               The input gpkg file of polygons.  [required]
   --output-file TEXT              The output gpkg file of smoothed medial
                                   axes.  [required]
-  --skip-spline BOOLEAN           Don't smooth the medial axis with a
-                                  B-spline.
+  --output-file-centroids TEXT    The output gpkg file of centroids. Only
+                                  required if --min-area > 0.
+  --min-area FLOAT RANGE          Minimum area of polygons to process.
+                                  Polygons smaller than this will have
+                                  centroids calculated instead of medial axes.
+                                  [0<=x<=1000000]
+  --simplification-factor FLOAT RANGE
+                                  Amount the output medial axes should be
+                                  simplified.  [0<=x<=1]
   --smoothing-iterations INTEGER RANGE
                                   The number of smoothing iterations to apply
-                                  to the medial axis (non-spline sections
-                                  only).  [1<=x<=10]
-  --spline-degree INTEGER RANGE   The degree of the spline. See
-                                  scipy.interpolate.splprep for more info.
-                                  [1<=x<=5]
-  --spline-distance-threshold INTEGER RANGE
-                                  The distance in meters from the edge of the
-                                  polygon the centerline must be to smooth
-                                  with a B-spline.  [0<=x<=100000]
-  --spline-distance-allowable-variance INTEGER RANGE
-                                  Once a section is greater than --spline-
-                                  distance-threshold, how much can the
-                                  distance vary less than --spline-distance-
-                                  threshold before the spline is terminated?
-                                  [0<=x<=100000]
+                                  to the medial axis.  [1<=x<=10]
+  --spline-degree INTEGER RANGE   For sections of the medial axes that are
+                                  smoothed with a spline, the degree of the
+                                  spline. See scipy.interpolate.splprep for
+                                  more info.  [1<=x<=5]
+  --spline-start-percent FLOAT RANGE
+                                  How far from the side of the polygon must
+                                  the medial axis be to use a spline to smooth
+                                  it? Expressed as a percentage of the length
+                                  of the small side of the bounding box
+                                  enclosing the polygon. Somewhere betwee 0.05
+                                  and 0.3 often works well.  [0<=x<=1]
+  --trim-output-lines-by-percent INTEGER RANGE
+                                  Trim the output lines from each end by this
+                                  percent.  [0<=x<=99]
+  --workers INTEGER               Number of workers to use. Defaults to all
+                                  available CPU cores.
   --debug                         Output debug geometry of the skeleton and
-                                  medial axis in a separate file.
+                                  medial axis in a separate file for
+                                  debugging.
   --help                          Show this message and exit.
 ```
